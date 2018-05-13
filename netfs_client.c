@@ -86,7 +86,7 @@ static int netfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_
     /* By default, we will return 0 from this function (success) */
     int res = 0;
 
-    struct attr_stat *atst = { 0 };
+    struct attr_stat atst = { 0 };
 
     if(strcmp(path, "/") == 0) 
     {
@@ -103,8 +103,8 @@ static int netfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_
         stbuf->st_mode = S_IFDIR | 0755;
         stbuf->st_nlink = 2;
 
-        // write_len(server_fd, &req_header, sizeof(struct netfs_msg_header));
-        // write_len(server_fd, path, req_header.msg_len);     
+        write_len(server_fd, &req_header, sizeof(struct netfs_msg_header));
+        write_len(server_fd, path, req_header.msg_len);     
 
         // read_len(server_fd, atst, sizeof(struct attr_stat));
 
@@ -115,11 +115,11 @@ static int netfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_
         //     atst->nlink = 2;
         // }
 
-        // atst.uid = stbuf->st_uid;
-        // atst.gid = stbuf->st_gid;
-        // atst.mode = stbuf->st_mode;
-        // atst.nlink = stbuf->st_nlink;
-        // atst.size = stbuf->st_size;
+        // atst->uid = stbuf->st_uid;
+        // atst->gid = stbuf->st_gid;
+        // atst->mode = stbuf->st_mode;
+        // atst->nlink = stbuf->st_nlink;
+        // atst->size = stbuf->st_size;
 
         // stbuf->st_uid = atst->uid;
         // stbuf->st_gid = atst->gid;
@@ -127,27 +127,27 @@ static int netfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_
         // stbuf->st_nlink = atst->nlink;
         // stbuf->st_size = atst->size;
 
-        printf("Directory information for %s\n", path);
-        printf("---------------------------\n");
-        printf("File size: \t\t%lld bytes\n", atst->size);
-        printf("Number of hard links: \t%d\n", atst->nlink);
-        printf("File inode: \t\t%llu\n", atst->ino);
-        printf("File type and mode: \t\t%hu\n", atst->mode);
-        printf("File user id: \t\t%u\n", atst->uid);
-        printf("File group id: \t\t%u\n", atst->gid);
+        // printf("Directory information for %s\n", path);
+        // printf("---------------------------\n");
+        // printf("File size: \t\t%lld bytes\n", atst->size);
+        // printf("Number of hard links: \t%d\n", atst->nlink);
+        // printf("File inode: \t\t%llu\n", atst->ino);
+        // printf("File type and mode: \t\t%hu\n", atst->mode);
+        // printf("File user id: \t\t%u\n", atst->uid);
+        // printf("File group id: \t\t%u\n", atst->gid);
      
-        printf("File Permissions: \t");
-        printf( (S_ISDIR(atst->mode)) ? "d" : "-");
-        printf( (atst->mode & S_IRUSR) ? "r" : "-");
-        printf( (atst->mode & S_IWUSR) ? "w" : "-");
-        printf( (atst->mode & S_IXUSR) ? "x" : "-");
-        printf( (atst->mode & S_IRGRP) ? "r" : "-");
-        printf( (atst->mode & S_IWGRP) ? "w" : "-");
-        printf( (atst->mode & S_IXGRP) ? "x" : "-");
-        printf( (atst->mode & S_IROTH) ? "r" : "-");
-        printf( (atst->mode & S_IWOTH) ? "w" : "-");
-        printf( (atst->mode & S_IXOTH) ? "x" : "-");
-        printf("\n\n");
+        // printf("File Permissions: \t");
+        // printf( (S_ISDIR(atst->mode)) ? "d" : "-");
+        // printf( (atst->mode & S_IRUSR) ? "r" : "-");
+        // printf( (atst->mode & S_IWUSR) ? "w" : "-");
+        // printf( (atst->mode & S_IXUSR) ? "x" : "-");
+        // printf( (atst->mode & S_IRGRP) ? "r" : "-");
+        // printf( (atst->mode & S_IWGRP) ? "w" : "-");
+        // printf( (atst->mode & S_IXGRP) ? "x" : "-");
+        // printf( (atst->mode & S_IROTH) ? "r" : "-");
+        // printf( (atst->mode & S_IWOTH) ? "w" : "-");
+        // printf( (atst->mode & S_IXOTH) ? "x" : "-");
+        // printf("\n\n");
 
         // return res;
     } 
@@ -160,14 +160,14 @@ static int netfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_
          * We also hard-code the size of this file based on its contents: 'hello
          * world!' */
 
-        stbuf->st_mode = S_IFREG | 0444;
-        stbuf->st_nlink = 1;
-        stbuf->st_size = MAXIMUM_PATH;
+        // stbuf->st_mode = S_IFREG | 0444;
+        // stbuf->st_nlink = 1;
+        // stbuf->st_size = MAXIMUM_PATH;
 
         write_len(server_fd, &req_header, sizeof(struct netfs_msg_header));
-        write_len(server_fd, path + 1, req_header.msg_len);     
+        write_len(server_fd, path, req_header.msg_len);     
 
-        read_len(server_fd, atst, sizeof(struct attr_stat));
+        read_len(server_fd, &atst, sizeof(struct attr_stat));
 
         // atst.uid = stbuf->st_uid;
         // atst.gid = stbuf->st_gid;
@@ -175,26 +175,33 @@ static int netfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_
         // atst.nlink = stbuf->st_nlink;
         // atst.size = stbuf->st_size;
 
+        stbuf->st_ino = atst.ino;
+        stbuf->st_uid = atst.uid;
+        stbuf->st_gid = atst.gid;
+        stbuf->st_mode = atst.mode;
+        stbuf->st_nlink = atst.nlink;
+        stbuf->st_size = atst.size;
+
         printf("Directory information for %s\n", path);
         printf("---------------------------\n");
-        printf("File size: \t\t%lld bytes\n", atst->size);
-        printf("Number of hard links: \t%d\n", atst->nlink);
-        printf("File inode: \t\t%llu\n", atst->ino);
-        printf("File type and mode: \t\t%hu\n", atst->mode);
-        printf("File user id: \t\t%u\n", atst->uid);
-        printf("File group id: \t\t%u\n", atst->gid);
+        printf("File size: \t\t%lld bytes\n", atst.size);
+        printf("Number of hard links: \t%d\n", atst.nlink);
+        printf("File inode: \t\t%llu\n", atst.ino);
+        printf("File type and mode: \t\t%hu\n", atst.mode);
+        printf("File user id: \t\t%u\n", atst.uid);
+        printf("File group id: \t\t%u\n", atst.gid);
      
         printf("File Permissions: \t");
-        printf( (S_ISDIR(atst->mode)) ? "d" : "-");
-        printf( (atst->mode & S_IRUSR) ? "r" : "-");
-        printf( (atst->mode & S_IWUSR) ? "w" : "-");
-        printf( (atst->mode & S_IXUSR) ? "x" : "-");
-        printf( (atst->mode & S_IRGRP) ? "r" : "-");
-        printf( (atst->mode & S_IWGRP) ? "w" : "-");
-        printf( (atst->mode & S_IXGRP) ? "x" : "-");
-        printf( (atst->mode & S_IROTH) ? "r" : "-");
-        printf( (atst->mode & S_IWOTH) ? "w" : "-");
-        printf( (atst->mode & S_IXOTH) ? "x" : "-");
+        printf( (S_ISDIR(atst.mode)) ? "d" : "-");
+        printf( (atst.mode & S_IRUSR) ? "r" : "-");
+        printf( (atst.mode & S_IWUSR) ? "w" : "-");
+        printf( (atst.mode & S_IXUSR) ? "x" : "-");
+        printf( (atst.mode & S_IRGRP) ? "r" : "-");
+        printf( (atst.mode & S_IWGRP) ? "w" : "-");
+        printf( (atst.mode & S_IXGRP) ? "x" : "-");
+        printf( (atst.mode & S_IROTH) ? "r" : "-");
+        printf( (atst.mode & S_IWOTH) ? "w" : "-");
+        printf( (atst.mode & S_IXOTH) ? "x" : "-");
         printf("\n\n");
 
         // if(pw->pw_uid == stbuf->st_uid)
@@ -221,44 +228,6 @@ static int netfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_
     // return -ENOENT;
     return res;
 
-
-    // LOG("getattr: %s\n", path);
-
-    // /* Clear the stat buffer */
-    // memset(stbuf, 0, sizeof(struct stat));
-
-    // /* By default, we will return 0 from this function (success) */
-    // int res = 0;
-
-    // if (strcmp(path, "/") == 0) {
-    //      This is the root directory. We have hard-coded the permissions to 755
-    //      * here, but you should apply the permissions from the remote directory
-    //      * instead. The mode means:
-    //      *   - S_IFDIR: this is a directory
-    //      *   - 0755: user can read, write, execute. All others can read+execute.
-    //      * The number of links refers to how many hard links point to the file.
-    //      * If the link count reaches 0, the file is effectively deleted (this is
-    //      * why deleting a file is actually 'unlinking' it).
-         
-    //     stbuf->st_mode = S_IFDIR | 0755;
-    //     stbuf->st_nlink = 2;
-    // } else if (strcmp(path+1, "test_file") == 0) {
-    //     /* Incrementing the path pointer by 1 will remove the '/' from the start
-    //      * of the path. We're comparing it with a hard-coded file name.
-    //      *   - S_IFREG: indicates a regular file
-    //      * We also hard-code the size of this file based on its contents: 'hello
-    //      * world!' */
-    //     stbuf->st_mode = S_IFREG | 0444;
-    //     stbuf->st_nlink = 1;
-    //     stbuf->st_size = strlen(TEST_DATA);
-    // } else {
-    //     /* -ENOENT = 'no such file or directory'. In other words, this demo code
-    //      * only supports the root directory and a single file named
-    //      * "test_file" */
-    //     res = -ENOENT;
-    // }
-
-    // return res;
 }
 
 static int netfs_readdir(
