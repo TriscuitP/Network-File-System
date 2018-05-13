@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/sendfile.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -50,6 +51,18 @@ void handle_request(int client_fd)
     {
         LOG("%s\n", "MSG_GETATTR");
         getattr_handler(client_fd, req_header);
+        return;
+    }
+    else if(type == MSG_OPEN)
+    {
+        LOG("%s\n", "MSG_OPEN");
+        open_handler(client_fd, req_header);
+        return;
+    }
+    else if(type == MSG_READ)
+    {
+        LOG("%s\n", "MSG_READ");
+        read_handler(client_fd, req_header);
         return;
     }
     else 
@@ -99,29 +112,19 @@ void readdir_handler(int client_fd, struct netfs_msg_header req_header)
     return;
 }
 
-//read_len the filename
-//save it into a stat struct
-//send it back to client
 void getattr_handler(int client_fd, struct netfs_msg_header req_header) 
 {
     char path[MAXIMUM_PATH] = { 0 };
     read_len(client_fd, path, req_header.msg_len);
     LOG("getattr: %s\n", path);
 
+    // Return if at root directory
     if(strcmp(path, "/") == 0)
         return;
 
     char full_path[MAXIMUM_PATH] = { 0 };
     strcpy(full_path, ".");
     strcat(full_path, path);
-
-    // DIR *directory;
-    // if ((directory = opendir(full_path)) == NULL) 
-    // {
-    //     perror("opendir");
-    //     close(client_fd);
-    //     return;
-    // }
 
     struct stat stbuf;
     struct attr_stat atst = {0};
@@ -140,6 +143,8 @@ void getattr_handler(int client_fd, struct netfs_msg_header req_header)
     atst.mode = stbuf.st_mode;
     atst.nlink = stbuf.st_nlink;
     atst.size = stbuf.st_size;
+    atst.blocks = stbuf.st_blocks;
+    atst.mtim = stbuf.st_mtim;
     write_len(client_fd, &atst, sizeof(struct attr_stat));
 
     close(client_fd); // Close socket connection
@@ -212,6 +217,98 @@ void getattr_handler(int client_fd, struct netfs_msg_header req_header)
     return;
 }
 
+void open_handler(int client_fd, struct netfs_msg_header req_header)
+{
+    char path[MAXIMUM_PATH] = { 0 };
+    read_len(client_fd, path, req_header.msg_len);
+    LOG("open: %s\n", path);
+
+    char full_path[MAXIMUM_PATH] = { 0 };
+    strcpy(full_path, ".");
+    strcat(full_path, path);
+
+    uint16_t success;
+
+    /* Check here if read_handler problems occur */
+    int fd = open(full_path, O_RDONLY);
+    if(fd == -1)
+    {
+        success = -1;
+        write_len(client_fd, &success, sizeof(uint16_t));
+        close(client_fd);
+        perror("open");
+        return;
+    }
+    else
+    {
+        success = 0;
+        write_len(client_fd, &success, sizeof(uint16_t));
+    }
+
+    // Send file descriptor for read
+    write_len(client_fd, &fd, sizeof(int));
+
+    close(client_fd);
+    return;
+}
+
+void read_handler(int client_fd, struct netfs_msg_header req_header)
+{
+    int fd;
+    size_t size;
+    off_t offset;
+
+    // fd
+    read_len(client_fd, &fd, sizeof(int));
+    // size
+    read_len(client_fd, &size, sizeof(size_t));
+    // offset
+    read_len(client_fd, &offset, sizeof(off_t));
+
+
+    // for(size_t size_to_send = size; size_to_send > 0; )
+    // {
+    //     ssize_t sent = sendfile(client_fd, fd, &offset, size_to_send);
+    //     if(sent <= 0)
+    //     {
+    //         if(sent != 0)
+    //             perror("sendfile");
+    //         break;
+    //     }
+
+    //     offset += sent;
+    //     size_to_send -= sent;
+    // }
+
+
+    char *buf = (char*)malloc(sizeof(char) * size);
+    int success = pread(fd, buf, size, offset);
+
+    write_len(client_fd, &success, sizeof(int));
+    
+    if(success >= 0)
+    {
+        // write_len(client_fd, buf, sizeof(char*));
+        for(size_t size_to_send = size; size_to_send > 0; )
+        {
+            ssize_t sent = sendfile(client_fd, fd, &offset, size_to_send);
+            if (sent <= 0)
+            {
+                if (sent != 0)
+                    perror("sendfile");
+                break;
+            }
+
+            offset += sent;
+            size_to_send -= sent;
+        }
+    }
+
+    close(client_fd);
+
+    return;
+}
+
 int main(int argc, char *argv[]) 
 {
 
@@ -269,7 +366,7 @@ int main(int argc, char *argv[])
         LOG("Accepted connection from %s\n", remote_host);
 
         handle_request(client_fd);
-        //going to have to fork for other parts of P3
+        // TODO: going to have to fork for other parts of P3
     }
 
     return 0;
