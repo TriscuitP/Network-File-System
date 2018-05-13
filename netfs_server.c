@@ -108,44 +108,66 @@ void getattr_handler(int client_fd, struct netfs_msg_header req_header)
     read_len(client_fd, path, req_header.msg_len);
     LOG("getattr: %s\n", path);
 
+    if(strcmp(path, "/") == 0)
+        return;
+
     char full_path[MAXIMUM_PATH] = { 0 };
     strcpy(full_path, ".");
     strcat(full_path, path);
 
-    DIR *directory;
-    if ((directory = opendir(full_path)) == NULL) 
+    // DIR *directory;
+    // if ((directory = opendir(full_path)) == NULL) 
+    // {
+    //     perror("opendir");
+    //     close(client_fd);
+    //     return;
+    // }
+
+    struct stat stbuf;
+    struct attr_stat atst = {0};
+
+
+    if(stat(full_path, &stbuf) < 0)
     {
-        perror("opendir");
         close(client_fd);
         return;
     }
 
-    struct stat stbuf;
-    struct attr_stat *atst = {0};
-    struct dirent *entry;
+    printf("\n***IS FILE***\n\n");
+    atst.ino = stbuf.st_ino;
+    atst.uid = stbuf.st_uid;
+    atst.gid = stbuf.st_gid;
+    atst.mode = stbuf.st_mode;
+    atst.nlink = stbuf.st_nlink;
+    atst.size = stbuf.st_size;
+    write_len(client_fd, &atst, sizeof(struct attr_stat));
 
-    while((entry = readdir(directory)) != NULL) 
-    {
-        sprintf(path,"%s/%s", home_path, entry->d_name);
-        printf("Path: %s\n", path);
-        printf("HERE\n");
-        stat(entry->d_name, &stbuf);
-        printf("HERE2\n");
-        atst->ino = stbuf.st_ino;
-        printf("HERE3\n");
-        atst->uid = stbuf.st_uid;
-        atst->gid = stbuf.st_gid;
-        atst->mode = stbuf.st_mode;
-        atst->nlink = stbuf.st_nlink;
-        atst->size = stbuf.st_size;
-        write_len(client_fd, atst, sizeof(struct attr_stat));
-    }
+    close(client_fd); // Close socket connection
+
+    // struct dirent *entry;
+
+    // while((entry = readdir(directory)) != NULL) 
+    // {
+        // sprintf(path,"%s/%s", home_path, entry->d_name);
+        // printf("Path: %s\n", path);
+    //     printf("HERE\n");
+    //     stat(entry->d_name, &stbuf);
+    //     printf("HERE2\n");
+    //     atst->ino = stbuf.st_ino;
+    //     printf("HERE3\n");
+    //     atst->uid = stbuf.st_uid;
+    //     atst->gid = stbuf.st_gid;
+    //     atst->mode = stbuf.st_mode;
+    //     atst->nlink = stbuf.st_nlink;
+    //     atst->size = stbuf.st_size;
+    //     write_len(client_fd, atst, sizeof(struct attr_stat));
+    // }
 
     // Last directory entry
     // write_len(client_fd, &len, sizeof(uint16_t));
 
-    closedir(directory);
-    close(client_fd); // Close socket connection
+    // closedir(directory);
+    // close(client_fd); // Close socket connection
     
 
     
@@ -154,14 +176,14 @@ void getattr_handler(int client_fd, struct netfs_msg_header req_header)
 
     // if(S_ISREG(stbuf->st_mode))
     // {
-    //     printf("IS FILE\n");
-    //     atst->ino = stbuf->st_ino;
-    //     atst->uid = stbuf->st_uid;
-    //     atst->gid = stbuf->st_gid;
-    //     atst->mode = stbuf->st_mode;
-    //     atst->nlink = stbuf->st_nlink;
-    //     atst->size = stbuf->st_size;
-    //     write_len(client_fd, atst, sizeof(struct attr_stat));
+        // printf("IS FILE\n");
+        // atst->ino = stbuf->st_ino;
+        // atst->uid = stbuf->st_uid;
+        // atst->gid = stbuf->st_gid;
+        // atst->mode = stbuf->st_mode;
+        // atst->nlink = stbuf->st_nlink;
+        // atst->size = stbuf->st_size;
+        // write_len(client_fd, atst, sizeof(struct attr_stat));
     //     close(client_fd);
     // }
     // else if(S_ISDIR(stbuf->st_mode))
@@ -175,8 +197,8 @@ void getattr_handler(int client_fd, struct netfs_msg_header req_header)
     // {
     //     printf("***Path stat function failed***\n");
         // perror("Perror ");
-    //     close(client_fd);
-    //     return;
+        // close(client_fd);
+        // return;
         
     // }
 
