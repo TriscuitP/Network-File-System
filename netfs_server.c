@@ -41,34 +41,79 @@ void handle_request(int client_fd)
     LOG("req_header type: %d\n", type);
 
 
-    if(type == MSG_READDIR) 
+    int status;
+    pid_t pid = fork();
+
+    if(pid == -1)
     {
-        LOG("%s\n", "MSG_READDIR");
-        readdir_handler(client_fd, req_header);
+        printf("%s\n", "Could not fork");
         return;
     }
-    else if(type == MSG_GETATTR)
+    else if(pid == 0) 
     {
-        LOG("%s\n", "MSG_GETATTR");
-        getattr_handler(client_fd, req_header);
-        return;
+        /* Child */
+        if(type == MSG_READDIR) 
+        {
+            LOG("%s\n", "MSG_READDIR");
+            readdir_handler(client_fd, req_header);
+            return;
+        }
+        else if(type == MSG_GETATTR)
+        {
+            LOG("%s\n", "MSG_GETATTR");
+            getattr_handler(client_fd, req_header);
+            return;
+        }
+        else if(type == MSG_OPEN)
+        {
+            LOG("%s\n", "MSG_OPEN");
+            open_handler(client_fd, req_header);
+            return;
+        }
+        else if(type == MSG_READ)
+        {
+            LOG("%s\n", "MSG_READ");
+            read_handler(client_fd, req_header);
+            return;
+        }
+        else 
+        {
+            LOG("%s\n", "error: Unknown request type\n"); 
+            return; 
+        }
     }
-    else if(type == MSG_OPEN)
-    {
-        LOG("%s\n", "MSG_OPEN");
-        open_handler(client_fd, req_header);
-        return;
-    }
-    else if(type == MSG_READ)
-    {
-        LOG("%s\n", "MSG_READ");
-        read_handler(client_fd, req_header);
-        return;
-    }
-    else 
-    {
-        LOG("%s\n", "error: Unknown request type\n");  
-    }
+    wait(&status);
+
+    // if(type == MSG_READDIR) 
+    // {
+    //     LOG("%s\n", "MSG_READDIR");
+    //     readdir_handler(client_fd, req_header);
+    //     return;
+    // }
+    // else if(type == MSG_GETATTR)
+    // {
+    //     LOG("%s\n", "MSG_GETATTR");
+    //     getattr_handler(client_fd, req_header);
+    //     return;
+    // }
+    // else if(type == MSG_OPEN)
+    // {
+    //     LOG("%s\n", "MSG_OPEN");
+    //     open_handler(client_fd, req_header);
+    //     return;
+    // }
+    // else if(type == MSG_READ)
+    // {
+    //     LOG("%s\n", "MSG_READ");
+    //     read_handler(client_fd, req_header);
+    //     return;
+    // }
+    // else 
+    // {
+    //     LOG("%s\n", "error: Unknown request type\n");  
+    // }
+
+    return;
 
 }
 
@@ -108,7 +153,7 @@ void readdir_handler(int client_fd, struct netfs_msg_header req_header)
 
     closedir(directory);
     close(client_fd); // Close socket connection
-
+    // fflush(stdout);
     return;
 }
 
@@ -129,9 +174,9 @@ void getattr_handler(int client_fd, struct netfs_msg_header req_header)
     struct stat stbuf;
     struct attr_stat atst = {0};
 
-
     if(stat(full_path, &stbuf) < 0)
     {
+        LOG("%s\n", "Stat function failed");
         close(client_fd);
         return;
     }
@@ -145,35 +190,50 @@ void getattr_handler(int client_fd, struct netfs_msg_header req_header)
     atst.size = stbuf.st_size;
     atst.blocks = stbuf.st_blocks;
     atst.mtim = stbuf.st_mtim;
+
+    // Change permissions to read-only
+    printf("File information for %s before change\n", path);
+    printf("---------------------------\n");
+    printf("File Permissions: \t");
+    printf( (S_ISDIR(atst.mode)) ? "d" : "-");
+    printf( (atst.mode & S_IRUSR) ? "r" : "-");
+    printf( (atst.mode & S_IWUSR) ? "w" : "-");
+    printf( (atst.mode & S_IXUSR) ? "x" : "-");
+    printf( (atst.mode & S_IRGRP) ? "r" : "-");
+    printf( (atst.mode & S_IWGRP) ? "w" : "-");
+    printf( (atst.mode & S_IXGRP) ? "x" : "-");
+    printf( (atst.mode & S_IROTH) ? "r" : "-");
+    printf( (atst.mode & S_IWOTH) ? "w" : "-");
+    printf( (atst.mode & S_IXOTH) ? "x" : "-");
+    printf("\n\n");
+
+    // int statchmod = buf.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
+    // printf("chmod: %o\n", statchmod);
+
+    if(S_ISDIR(atst.mode))
+        atst.mode = S_IFDIR | 0444;
+    else if(S_ISREG(atst.mode))
+        atst.mode = S_IFREG | 0444;
+
+    printf("File information for %s after change\n", path);
+    printf("---------------------------\n");
+    printf("File Permissions: \t");
+    printf( (S_ISDIR(atst.mode)) ? "d" : "-");
+    printf( (atst.mode & S_IRUSR) ? "r" : "-");
+    printf( (atst.mode & S_IWUSR) ? "w" : "-");
+    printf( (atst.mode & S_IXUSR) ? "x" : "-");
+    printf( (atst.mode & S_IRGRP) ? "r" : "-");
+    printf( (atst.mode & S_IWGRP) ? "w" : "-");
+    printf( (atst.mode & S_IXGRP) ? "x" : "-");
+    printf( (atst.mode & S_IROTH) ? "r" : "-");
+    printf( (atst.mode & S_IWOTH) ? "w" : "-");
+    printf( (atst.mode & S_IXOTH) ? "x" : "-");
+    printf("\n\n");
+
     write_len(client_fd, &atst, sizeof(struct attr_stat));
 
     close(client_fd); // Close socket connection
-
-    // struct dirent *entry;
-
-    // while((entry = readdir(directory)) != NULL) 
-    // {
-        // sprintf(path,"%s/%s", home_path, entry->d_name);
-        // printf("Path: %s\n", path);
-    //     printf("HERE\n");
-    //     stat(entry->d_name, &stbuf);
-    //     printf("HERE2\n");
-    //     atst->ino = stbuf.st_ino;
-    //     printf("HERE3\n");
-    //     atst->uid = stbuf.st_uid;
-    //     atst->gid = stbuf.st_gid;
-    //     atst->mode = stbuf.st_mode;
-    //     atst->nlink = stbuf.st_nlink;
-    //     atst->size = stbuf.st_size;
-    //     write_len(client_fd, atst, sizeof(struct attr_stat));
-    // }
-
-    // Last directory entry
-    // write_len(client_fd, &len, sizeof(uint16_t));
-
-    // closedir(directory);
-    // close(client_fd); // Close socket connection
-    
+    // fflush(stdout);
 
     
     // printf("HERE3\n");
@@ -198,20 +258,6 @@ void getattr_handler(int client_fd, struct netfs_msg_header req_header)
     //     close(client_fd);
     // }
 
-    // if(stat(full_path, stbuf) < 0) 
-    // {
-    //     printf("***Path stat function failed***\n");
-        // perror("Perror ");
-        // close(client_fd);
-        // return;
-        
-    // }
-
-    // if(atst != NULL)
-    // atst = NULL;
-    // write_len(client_fd, atst, sizeof(struct attr_stat));
-    // else
-    // printf("STAT FUNCTION SUCCESS\n");
 
     
     return;
@@ -249,6 +295,7 @@ void open_handler(int client_fd, struct netfs_msg_header req_header)
     write_len(client_fd, &fd, sizeof(int));
 
     close(client_fd);
+    // fflush(stdout);
     return;
 }
 
@@ -280,8 +327,9 @@ void read_handler(int client_fd, struct netfs_msg_header req_header)
     //     size_to_send -= sent;
     // }
 
-
-    char *buf = (char*)malloc(sizeof(char) * size);
+    // Create buffer with size of file
+    char *buf = malloc(sizeof(char) * size);
+    // Returns the number of bytes read, zero indicates end of file
     int success = pread(fd, buf, size, offset);
 
     write_len(client_fd, &success, sizeof(int));
@@ -292,9 +340,9 @@ void read_handler(int client_fd, struct netfs_msg_header req_header)
         for(size_t size_to_send = size; size_to_send > 0; )
         {
             ssize_t sent = sendfile(client_fd, fd, &offset, size_to_send);
-            if (sent <= 0)
+            if(sent <= 0)
             {
-                if (sent != 0)
+                if(sent != 0)
                     perror("sendfile");
                 break;
             }
@@ -305,7 +353,7 @@ void read_handler(int client_fd, struct netfs_msg_header req_header)
     }
 
     close(client_fd);
-
+    // fflush(stdout);
     return;
 }
 
@@ -366,7 +414,10 @@ int main(int argc, char *argv[])
         LOG("Accepted connection from %s\n", remote_host);
 
         handle_request(client_fd);
+
         // TODO: going to have to fork for other parts of P3
+        
+
     }
 
     return 0;
