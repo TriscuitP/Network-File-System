@@ -36,6 +36,7 @@
 static struct options {
     int show_help;
     int port;
+    char *server;
 } options;
 
 #define OPTION(t, p) { t, offsetof(struct options, p), 1 }
@@ -46,6 +47,7 @@ static const struct fuse_opt option_spec[] = {
     OPTION("-h", show_help),
     OPTION("--help", show_help),
     OPTION("--port=%d", port),
+    OPTION("--server=%s", server),
     FUSE_OPT_END
 };
 
@@ -283,7 +285,9 @@ static int netfs_readdir(
 
     close(server_fd);
     
-    /* We only support one directory: the root directory. */
+    /* TODO: We only support one directory: the root directory. */
+    // char *strstr(const char *haystack, const char *needle)
+    // Finds the first occurrence of the entire string needle 
 
     return res;
 }
@@ -466,9 +470,16 @@ int main(int argc, char *argv[]) {
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
     /* Set up default options: */
     options.port = DEFAULT_PORT;
+    options.server = NULL;
 
     /* Parse options */
     if (fuse_opt_parse(&args, &options, option_spec, NULL) == -1) {
+        return 1;
+    }
+
+    if(options.server == NULL)
+    {
+        LOG("%s\n", "Server is NULL");
         return 1;
     }
 
