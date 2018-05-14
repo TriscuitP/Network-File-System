@@ -50,7 +50,6 @@ static const struct fuse_opt option_spec[] = {
 };
 
 // TODO: uids and gids
-// TODO: read-only
 static int netfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi)
 {
     LOG("getattr: %s\n", path);
@@ -101,9 +100,7 @@ static int netfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_
         stbuf->st_nlink = 2;
 
         write_len(server_fd, &req_header, sizeof(struct netfs_msg_header));
-        write_len(server_fd, path, req_header.msg_len);     
-
-        // read_len(server_fd, atst, sizeof(struct attr_stat));
+        write_len(server_fd, path, req_header.msg_len);
 
         
         // if(atst == NULL)
@@ -181,29 +178,29 @@ static int netfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_
         stbuf->st_blocks = atst.blocks;
         stbuf->st_mtim = atst.mtim;
 
-        printf("Directory information for %s\n", path);
-        printf("---------------------------\n");
-        printf("File size: \t\t%lld bytes\n", atst.size);
-        printf("Number of hard links: \t%d\n", atst.nlink);
-        printf("File inode: \t\t%llu\n", atst.ino);
-        printf("File type and mode: \t%hu\n", atst.mode);
-        printf("File user id: \t\t%u\n", atst.uid);
-        printf("File group id: \t\t%u\n", atst.gid);
+        // printf("File information for %s\n", path);
+        // printf("---------------------------\n");
+        // printf("File size: \t\t%lld bytes\n", atst.size);
+        // printf("Number of hard links: \t%d\n", atst.nlink);
+        // printf("File inode: \t\t%llu\n", atst.ino);
+        // printf("File type and mode: \t%hu\n", atst.mode);
+        // printf("File user id: \t\t%u\n", atst.uid);
+        // printf("File group id: \t\t%u\n", atst.gid);
      
-        printf("File Permissions: \t");
-        printf( (S_ISDIR(atst.mode)) ? "d" : "-");
-        printf( (atst.mode & S_IRUSR) ? "r" : "-");
-        printf( (atst.mode & S_IWUSR) ? "w" : "-");
-        printf( (atst.mode & S_IXUSR) ? "x" : "-");
-        printf( (atst.mode & S_IRGRP) ? "r" : "-");
-        printf( (atst.mode & S_IWGRP) ? "w" : "-");
-        printf( (atst.mode & S_IXGRP) ? "x" : "-");
-        printf( (atst.mode & S_IROTH) ? "r" : "-");
-        printf( (atst.mode & S_IWOTH) ? "w" : "-");
-        printf( (atst.mode & S_IXOTH) ? "x" : "-");
-        printf("\n\n");
+        // printf("File Permissions: \t");
+        // printf( (S_ISDIR(atst.mode)) ? "d" : "-");
+        // printf( (atst.mode & S_IRUSR) ? "r" : "-");
+        // printf( (atst.mode & S_IWUSR) ? "w" : "-");
+        // printf( (atst.mode & S_IXUSR) ? "x" : "-");
+        // printf( (atst.mode & S_IRGRP) ? "r" : "-");
+        // printf( (atst.mode & S_IWGRP) ? "w" : "-");
+        // printf( (atst.mode & S_IXGRP) ? "x" : "-");
+        // printf( (atst.mode & S_IROTH) ? "r" : "-");
+        // printf( (atst.mode & S_IWOTH) ? "w" : "-");
+        // printf( (atst.mode & S_IXOTH) ? "x" : "-");
+        // printf("\n\n");
 
-        // if(pw->pw_uid == stbuf->st_uid)
+        // if(pw->pw_uid == atst.uid)
         // {
         //     printf("This file is owned by the current user\n");
         // }
@@ -220,11 +217,12 @@ static int netfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_
     }
     else
     {
+        /* -ENOENT = 'no such file or directory'  */
         res = -ENOENT;
     }
 
-    //  -ENOENT = 'no such file or directory' 
-    // return -ENOENT;
+    close(server_fd);
+    
     return res;
 
 }
@@ -268,11 +266,11 @@ static int netfs_readdir(
         
         // filler(buf, ".", NULL, 0, 0);       // Current Directory
         // filler(buf, "..", NULL, 0, 0);       // Parent Directory
-        printf("HERE\n");
+        // printf("HERE\n");
         read_len(server_fd, &reply_len, sizeof(uint16_t));
-        printf("HERE2\n");
+        // printf("HERE2\n");
         read_len(server_fd, reply_path, reply_len);
-        printf("HERE3\n");
+        // printf("HERE3\n");
 
         printf("-> %s\n", reply_path);
         printf("reply_len: %d\n", reply_len);
@@ -284,6 +282,7 @@ static int netfs_readdir(
     } while(reply_len > 0);
 
     close(server_fd);
+    
     /* We only support one directory: the root directory. */
 
     return res;
@@ -322,7 +321,7 @@ static int netfs_open(const char *path, struct fuse_file_info *fi)
     write_len(server_fd, &req_header, sizeof(struct netfs_msg_header));
     write_len(server_fd, path, req_header.msg_len);
 
-    int fd;
+    uint64_t fd;
     uint16_t success;
 
     read_len(server_fd, &success, sizeof(uint16_t));
@@ -330,18 +329,19 @@ static int netfs_open(const char *path, struct fuse_file_info *fi)
     if(success == -1)
     {
         res = 1;
-        printf("%s\n", "Open Failure");
+        LOG("%s\n", "Open Failure");
     }
     else
     {
-        printf("%s\n", "Open Successful");
+        LOG("%s\n", "Open Successful");
 
-        // Save file descriptor for read
+        // Save file descriptor for read in file handler
         read_len(server_fd, &fd, sizeof(int));
         fi->fh = fd;
     }
 
     close(server_fd);
+    
     return res;
 }
 
@@ -352,7 +352,7 @@ static int netfs_read(
 
     LOG("read: %s\n", path);
 
-    int fd = fi->fh;
+    uint64_t fd = fi->fh;
 
     struct netfs_msg_header req_header = { 0 };
     req_header.msg_type = MSG_READ;
@@ -369,8 +369,8 @@ static int netfs_read(
     }
 
     LOG("server_fd: %d\n", server_fd);
-    LOG("*******offset: %lld\n", offset);
-    LOG("*******offset: %d\n", offset);
+    // LOG("*******offset: %lld\n", offset);
+    // LOG("*******offset: %d\n", offset);
 
     write_len(server_fd, &req_header, sizeof(struct netfs_msg_header));
 
@@ -422,6 +422,7 @@ static int netfs_read(
     }
 
     close(server_fd);
+    
 
     // if(strcmp(path+1, "test_file") != 0) {
     //     // We only support one file (test_file)...
