@@ -207,13 +207,38 @@ void getattr_handler(int client_fd, struct netfs_msg_header req_header)
     printf( (atst.mode & S_IXOTH) ? "x" : "-");
     printf("\n\n");
 
-    // int statchmod = buf.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
-    // printf("chmod: %o\n", statchmod);
+    int statchmod = atst.mode & (S_IRWXU | S_IRWXG | S_IRWXO);
+    printf("********chmod: %o\n", statchmod);
 
-    if(S_ISDIR(atst.mode))
-        atst.mode = S_IFDIR | 0444;
-    else if(S_ISREG(atst.mode))
-        atst.mode = S_IFREG | 0444;
+    if((atst.mode >> 7) & 0b1)
+    {
+        if(S_ISDIR(atst.mode))
+            atst.mode = atst.mode & (S_IFDIR | 0577);
+        else
+            atst.mode = atst.mode & (S_IFREG | 0577);
+    }
+    if((atst.mode >> 4) & 0b1)
+    {
+        if(S_ISDIR(atst.mode))
+            atst.mode = atst.mode & (S_IFDIR | 0757);
+        else
+            atst.mode = atst.mode & (S_IFREG | 0757);
+    }
+    if((atst.mode >> 1) & 0b1)
+    {
+        if(S_ISDIR(atst.mode))
+            atst.mode = atst.mode & (S_IFDIR | 0775);
+        else
+            atst.mode = atst.mode & (S_IFREG | 0775);
+    }
+
+    // if(S_ISDIR(atst.mode))
+    //     atst.mode = S_IFDIR | 0444;
+    // if(S_ISREG(atst.mode))
+    //     atst.mode = S_IFREG | 0444;
+
+    // atst.mode = atst.mode & 0555;
+    // atst.mode = S_IFREG & 0555;
 
     printf("File information for %s after change\n", path);
     printf("---------------------------\n");
@@ -368,6 +393,10 @@ int main(int argc, char *argv[])
     chdir(argv[1]);
     home_path = argv[1];
 
+    int port = DEFAULT_PORT;
+    if(strcmp(argv[2], ".") != 0)
+        port = atoi(argv[2]);
+
     int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (socket_fd == -1) {
         perror("socket");
@@ -377,7 +406,7 @@ int main(int argc, char *argv[])
     struct sockaddr_in addr = { 0 };
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = htons(DEFAULT_PORT);
+    addr.sin_port = htons(port);
     if (bind(socket_fd, (struct sockaddr *) &addr, sizeof(addr)) == -1) {
         perror("bind");
         return 1;
@@ -388,7 +417,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    LOG("Listening on port %d\n", DEFAULT_PORT);
+    LOG("Listening on port %d\n", port);
 
     while(true) {
         struct sockaddr_storage client_addr = { 0 };
