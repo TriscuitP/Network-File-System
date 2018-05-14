@@ -20,7 +20,7 @@ struct __attribute__((__packed__)) netfs_msg_header {
 
 struct attr_stat
 {
-	ino_t ino;	            /* Inode number */
+    ino_t ino;	            /* Inode number */
     uid_t uid;              /* User ID of owner */
     gid_t gid;              /* Group ID of owner */
     mode_t mode;            /* File type and mode */
