@@ -51,29 +51,30 @@ static const struct fuse_opt option_spec[] = {
     FUSE_OPT_END
 };
 
-// TODO: uids and gids
+/*
+ * NFS Get Attributes
+ */
 static int netfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi)
 {
-    LOG("getattr: %s\n", path);
+    LOG("GETATTR: %s\n", path);
 
-    struct passwd *pw;
+    struct passwd *pw_client;
     uid_t uid;
 
     uid = geteuid();
-    pw = getpwuid(uid);
+    pw_client = getpwuid(uid);
 
     struct netfs_msg_header req_header = { 0 };
     req_header.msg_type = MSG_GETATTR;
     req_header.msg_len =  strlen(path) + 1;
 
-    /* TODO: change localhost to what user puts */
-    int server_fd = connect_to("localhost", DEFAULT_PORT);
+    int server_fd = connect_to(options.server, options.port);
     
     // We should check if server is less than 0 here...
     if(server_fd < 0)
     {
         perror("Socket failed");
-        exit(-1);
+        return 1;
     }
 
     LOG("server_fd: %d\n", server_fd);
@@ -86,8 +87,10 @@ static int netfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_
 
     struct attr_stat atst = { 0 };
 
+    // Root Directory
     if(strcmp(path, "/") == 0) 
     {
+        LOG("%s\n", "DIRECTORY");
         /* This is the root directory. We have hard-coded the permissions to 755
          * here, but you should apply the permissions from the remote directory
          * instead. The mode means:
@@ -103,74 +106,34 @@ static int netfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_
 
         write_len(server_fd, &req_header, sizeof(struct netfs_msg_header));
         write_len(server_fd, path, req_header.msg_len);
-
-        
-        // if(atst == NULL)
-        // {
-        //     atst->mode = S_IFDIR | 0755;
-        //     atst->nlink = 2;
-        // }
-
-        // atst->uid = stbuf->st_uid;
-        // atst->gid = stbuf->st_gid;
-        // atst->mode = stbuf->st_mode;
-        // atst->nlink = stbuf->st_nlink;
-        // atst->size = stbuf->st_size;
-
-        // stbuf->st_uid = atst->uid;
-        // stbuf->st_gid = atst->gid;
-        // stbuf->st_mode = atst->mode;
-        // stbuf->st_nlink = atst->nlink;
-        // stbuf->st_size = atst->size;
-
-        // printf("Directory information for %s\n", path);
-        // printf("---------------------------\n");
-        // printf("File size: \t\t%lld bytes\n", atst->size);
-        // printf("Number of hard links: \t%d\n", atst->nlink);
-        // printf("File inode: \t\t%llu\n", atst->ino);
-        // printf("File type and mode: \t\t%hu\n", atst->mode);
-        // printf("File user id: \t\t%u\n", atst->uid);
-        // printf("File group id: \t\t%u\n", atst->gid);
-     
-        // printf("File Permissions: \t");
-        // printf( (S_ISDIR(atst->mode)) ? "d" : "-");
-        // printf( (atst->mode & S_IRUSR) ? "r" : "-");
-        // printf( (atst->mode & S_IWUSR) ? "w" : "-");
-        // printf( (atst->mode & S_IXUSR) ? "x" : "-");
-        // printf( (atst->mode & S_IRGRP) ? "r" : "-");
-        // printf( (atst->mode & S_IWGRP) ? "w" : "-");
-        // printf( (atst->mode & S_IXGRP) ? "x" : "-");
-        // printf( (atst->mode & S_IROTH) ? "r" : "-");
-        // printf( (atst->mode & S_IWOTH) ? "w" : "-");
-        // printf( (atst->mode & S_IXOTH) ? "x" : "-");
-        // printf("\n\n");
-
-        // return res;
     } 
     else if((path + 1) != NULL)
     {
-        LOG("%s\n", "FILE STUFF");
+        LOG("%s\n", "FILE");
         /* Incrementing the path pointer by 1 will remove the '/' from the start
          * of the path. We're comparing it with a hard-coded file name.
          *   - S_IFREG: indicates a regular file
          * We also hard-code the size of this file based on its contents: 'hello
          * world!' */
 
-        // stbuf->st_mode = S_IFREG | 0444;
-        // stbuf->st_nlink = 1;
-        // stbuf->st_size = MAXIMUM_PATH;
-
         write_len(server_fd, &req_header, sizeof(struct netfs_msg_header));
-        write_len(server_fd, path, req_header.msg_len);     
+        write_len(server_fd, path, req_header.msg_len);
+
+        int stat_success = 0;
+        read_len(server_fd, &stat_success, sizeof(int));
+        if(stat_success == 0)
+        {
+            LOG("%s\n", "Stat function couldn't read file");
+            return -ENOENT;
+        }
 
         read_len(server_fd, &atst, sizeof(struct attr_stat));
 
-        // atst.uid = stbuf->st_uid;
-        // atst.gid = stbuf->st_gid;
-        // atst.mode = stbuf->st_mode;
-        // atst.nlink = stbuf->st_nlink;
-        // atst.size = stbuf->st_size;
+        // Check if client id mathces file id
+        if(atst.uid == 1)
+            atst.uid = pw_client->pw_uid;
 
+        // Add appropriate attributes
         stbuf->st_ino = atst.ino;
         stbuf->st_uid = atst.uid;
         stbuf->st_gid = atst.gid;
@@ -179,43 +142,6 @@ static int netfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_
         stbuf->st_size = atst.size;
         stbuf->st_blocks = atst.blocks;
         stbuf->st_mtim = atst.mtim;
-
-        // printf("File information for %s\n", path);
-        // printf("---------------------------\n");
-        // printf("File size: \t\t%lld bytes\n", atst.size);
-        // printf("Number of hard links: \t%d\n", atst.nlink);
-        // printf("File inode: \t\t%llu\n", atst.ino);
-        // printf("File type and mode: \t%hu\n", atst.mode);
-        // printf("File user id: \t\t%u\n", atst.uid);
-        // printf("File group id: \t\t%u\n", atst.gid);
-     
-        // printf("File Permissions: \t");
-        // printf( (S_ISDIR(atst.mode)) ? "d" : "-");
-        // printf( (atst.mode & S_IRUSR) ? "r" : "-");
-        // printf( (atst.mode & S_IWUSR) ? "w" : "-");
-        // printf( (atst.mode & S_IXUSR) ? "x" : "-");
-        // printf( (atst.mode & S_IRGRP) ? "r" : "-");
-        // printf( (atst.mode & S_IWGRP) ? "w" : "-");
-        // printf( (atst.mode & S_IXGRP) ? "x" : "-");
-        // printf( (atst.mode & S_IROTH) ? "r" : "-");
-        // printf( (atst.mode & S_IWOTH) ? "w" : "-");
-        // printf( (atst.mode & S_IXOTH) ? "x" : "-");
-        // printf("\n\n");
-
-        // if(pw->pw_uid == atst.uid)
-        // {
-        //     printf("This file is owned by the current user\n");
-        // }
-        // else
-        // {
-        //     if((stbuf->st_mode & S_IROTH) == 4)
-        //         printf("This file is owned by someone else but *IS* readable by this process\n");
-        //     else
-        //         printf("This file is owned by someone else and is *NOT* readable by this process\n");
-        // }
-
-        // return res;
-
     }
     else
     {
@@ -229,12 +155,15 @@ static int netfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_
 
 }
 
+/*
+ * Read contents of directory given by server
+ */ 
 static int netfs_readdir(
         const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
         struct fuse_file_info *fi, enum fuse_readdir_flags flags) 
 {
 
-    LOG("readdir: %s\n", path);
+    LOG("READDIR: %s\n", path);
 
     /* By default, we will return 0 from this function (success) */
     int res = 0;
@@ -246,14 +175,13 @@ static int netfs_readdir(
     LOG("msg_readdir: %d\n", MSG_READDIR);
     LOG("path: %s\n", path);
 
-    /* TODO: change localhost to what user puts */
-    int server_fd = connect_to("localhost", DEFAULT_PORT);
+    int server_fd = connect_to(options.server, options.port);
     
     // We should check if server is less than 0 here...
     if(server_fd < 0)
     {
         perror("Socket failed");
-        exit(-1);
+        return 1;
     }
 
     LOG("server_fd: %d\n", server_fd);
@@ -261,41 +189,38 @@ static int netfs_readdir(
     write_len(server_fd, &req_header, sizeof(struct netfs_msg_header));
     write_len(server_fd, path, req_header.msg_len);
 
-    uint16_t reply_len;
+    uint16_t reply_len = 1;
     char reply_path[MAXIMUM_PATH] = { 0 };
 
-    do {
-        
-        // filler(buf, ".", NULL, 0, 0);       // Current Directory
-        // filler(buf, "..", NULL, 0, 0);       // Parent Directory
-        // printf("HERE\n");
+    // Keep taking in files that server sends
+    while(reply_len > 0)
+    {
         read_len(server_fd, &reply_len, sizeof(uint16_t));
-        // printf("HERE2\n");
         read_len(server_fd, reply_path, reply_len);
-        // printf("HERE3\n");
+
+        // Break to end loop and no duplicate file/folder appears
+        if(reply_len == 0)
+            break;
 
         printf("-> %s\n", reply_path);
         printf("reply_len: %d\n", reply_len);
 
-        filler(buf, reply_path, NULL, 0, 0);
-
-        
-
-    } while(reply_len > 0);
+        filler(buf, reply_path, NULL, 0, 0); 
+    }
 
     close(server_fd);
-    
-    /* TODO: We only support one directory: the root directory. */
-    // char *strstr(const char *haystack, const char *needle)
-    // Finds the first occurrence of the entire string needle 
 
     return res;
 }
 
+/*
+ * Takes in integer from open to check if file opened correctly. If so then,
+ * save file descriptor in to fuse_file_info file handler (fh) for read
+ */
 static int netfs_open(const char *path, struct fuse_file_info *fi) 
 {
 
-    LOG("open: %s\n", path);
+    LOG("OPEN: %s\n", path);
 
     /* We only support opening the file in read-only mode */
     if((fi->flags & O_ACCMODE) != O_RDONLY) 
@@ -310,14 +235,13 @@ static int netfs_open(const char *path, struct fuse_file_info *fi)
     req_header.msg_type = MSG_OPEN;
     req_header.msg_len =  strlen(path) + 1;
 
-    /* TODO: change localhost to what user puts */
-    int server_fd = connect_to("localhost", DEFAULT_PORT);
+    int server_fd = connect_to(options.server, options.port);
     
     // We should check if server is less than 0 here...
     if(server_fd < 0)
     {
         perror("Socket failed");
-        exit(-1);
+        return 1;
     }
 
     LOG("server_fd: %d\n", server_fd);
@@ -325,9 +249,9 @@ static int netfs_open(const char *path, struct fuse_file_info *fi)
     write_len(server_fd, &req_header, sizeof(struct netfs_msg_header));
     write_len(server_fd, path, req_header.msg_len);
 
-    uint64_t fd;
     uint16_t success;
 
+    // Read in value whether open was successful or not
     read_len(server_fd, &success, sizeof(uint16_t));
 
     if(success == -1)
@@ -338,10 +262,6 @@ static int netfs_open(const char *path, struct fuse_file_info *fi)
     else
     {
         LOG("%s\n", "Open Successful");
-
-        // Save file descriptor for read in file handler
-        read_len(server_fd, &fd, sizeof(int));
-        fi->fh = fd;
     }
 
     close(server_fd);
@@ -349,102 +269,73 @@ static int netfs_open(const char *path, struct fuse_file_info *fi)
     return res;
 }
 
+/* 
+ * Sends file information to server and takes in bytes from server to store to buffer
+ */
 static int netfs_read(
         const char *path, char *buf, size_t size, off_t offset,
         struct fuse_file_info *fi) 
 {
 
-    LOG("read: %s\n", path);
-
-    uint64_t fd = fi->fh;
+    LOG("READ: %s\n", path);
 
     struct netfs_msg_header req_header = { 0 };
     req_header.msg_type = MSG_READ;
     req_header.msg_len =  strlen(path) + 1;
 
-    /* TODO: change localhost to what user puts */
-    int server_fd = connect_to("localhost", DEFAULT_PORT);
+    int server_fd = connect_to(options.server, options.port);
     
     // We should check if server is less than 0 here...
     if(server_fd < 0)
     {
         perror("Socket failed");
-        exit(-1);
+        return 1;
     }
 
     LOG("server_fd: %d\n", server_fd);
-    // LOG("*******offset: %lld\n", offset);
-    // LOG("*******offset: %d\n", offset);
 
     write_len(server_fd, &req_header, sizeof(struct netfs_msg_header));
+    write_len(server_fd, path, req_header.msg_len);
 
-    write_len(server_fd, &fd, sizeof(int));
+    int stat_success = 0;
+    read_len(server_fd, &stat_success, sizeof(int));
+    if(stat_success == 0)
+    {
+        LOG("%s\n", "Stat function couldn't read file");
+        return -ENOENT;
+    }
 
+    // File Size
     write_len(server_fd, &size, sizeof(size_t));
-
+    // Offset
     write_len(server_fd, &offset, sizeof(off_t));
 
-    // for(size_t size_to_rec = size; size_to_rec > 0; )
-    // {
-    //     ssize_t rec = sendfile(fd, server_fd, &offset, size_to_rec);
-    //     if(rec <= 0)
-    //     {
-    //         if(rec != 0)
-    //             perror("sendfile");
-    //         break;
-    //     }
-
-    //     memcpy(buf, fd + offset, size_to_rec);
-
-    //     offset += size_to_rec;
-    //     size_to_rec -= rec;
-    // }
-
-
-
-
-    int success;
-    read_len(server_fd, &success, sizeof(int));
-
-    if(success > 0)
+    // Get number of bytes to read
+    int bytes_read;
+    read_len(server_fd, &bytes_read, sizeof(int));
+    // If read was successful in server side
+    if(bytes_read > 0)
     {
-        // read_len(server_fd, buf, sizeof(char*));
         int size_to_rec = 0;
-        while(size_to_rec < success)
+        while(size_to_rec < bytes_read)
         {
-            int rec = recv(server_fd, buf + size_to_rec, success - size_to_rec, 0);
+            int rec = recv(server_fd, buf + size_to_rec, bytes_read - size_to_rec, 0);
+            printf("Rec: %d\n", rec);
 
             if(rec <= 0)
             {
                 if(rec != 0)
                     perror("Read failed");
+
                 break;
             }
 
-            size_to_rec = size_to_rec + rec;
+            size_to_rec += rec;
         }
+
     }
 
     close(server_fd);
-    
-
-    // if(strcmp(path+1, "test_file") != 0) {
-    //     // We only support one file (test_file)...
-    //     return -ENOENT;
-    // }
-
-    // size_t len;
-    // len = strlen(TEST_DATA);
-    // if (offset < len) {
-    //     if (offset + size > len) {
-    //         size = len - offset;
-    //     }
-        /* Note how the read request may not start at the beginning of the file.
-         * We take the offset into account here: */
-    //     memcpy(buf, TEST_DATA + offset, size);
-    // } else {
-    //     size = 0;
-    // }
 
     return size;
 }
