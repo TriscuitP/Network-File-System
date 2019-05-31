@@ -20,15 +20,12 @@
 #include "logging.h"
 
 ssize_t read_len(int fd, void *buf, size_t length) {
-    // printf("HERE4\n");
     ssize_t bytes = 0;
     size_t bytes_read = 0;
 
     while(bytes_read < length) {
-        // printf("HERE5\n");
         // printf("read_len size_t length: %d\n", length);
         bytes = read(fd, buf + bytes_read, length - bytes_read);
-        // printf("HERE6\n");
         if(bytes == -1) {
             perror("read");
             return -1;
@@ -58,7 +55,8 @@ ssize_t write_len(int fd, void *buf, size_t length) {
     return bytes_written; 
 }
 
-int connect_to(char *hostname, int port) {
+int connect_to(char *hostname, int port) 
+{
 
     int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
 
